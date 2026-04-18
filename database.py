@@ -2,14 +2,13 @@ import psycopg2
 import psycopg2.extras
 from config import PG_DSN
 
-# Conecta com o banco, e traduz pra uma forma mais legal de mexer no python (dicionário)
+# Conecta com o banco, e traduz pra dicionário
 def conn():
     return psycopg2.connect(PG_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 
-# Criação dessa desgraça de banco. Odeio, não sei como funciona, mas funciona
-# Tem índíce, precisa? Não, mas é legal ter
+# DDL
 def init_db():
     with conn() as c, c.cursor() as cur:
         cur.execute("""
@@ -34,7 +33,7 @@ def init_db():
         """)
 
 
-# Usuários, esse UPSERT é um negócio legal q da pra dar update e insert ao mesmo tempo
+# Usuários
 def upsert_user(username: str, name: str, email: str):
     with conn() as c, c.cursor() as cur:
         cur.execute("""
@@ -45,7 +44,7 @@ def upsert_user(username: str, name: str, email: str):
 
 
 
-# Histórico de msg. Salva as mensagens da conversa com a IA
+# Salvar mensagens no histórico
 def salvar_mensagem(username: str, papel: str, mensagem: str):
     with conn() as c, c.cursor() as cur:
         cur.execute(

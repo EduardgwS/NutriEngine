@@ -21,7 +21,7 @@ PG_DSN = (
 )
 
 
-# Promts da Megumi e do Taco (Gemini mas pra fazer a pesquisa dos alimentos antes de passar pra megumi)
+# Promts da Megumi e para Gemini Taco
 MEGUMI_PROMPT = (
     "Você é a Megumi, assistente nutricional avançada do aplicativo nutricional NutriEngine. "
     "Responda de forma técnica, amigável e direta ao que o usuário perguntou. "

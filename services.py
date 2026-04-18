@@ -25,8 +25,7 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
 
         if tem_texto:
             parts.append(texto)
-        elif tem_imagem:
-            # Caso só tiver imagem (aba pesquisar)
+        else:
             parts.append("Identifique o alimento principal nesta imagem.")
 
         response = client.models.generate_content(
@@ -46,7 +45,7 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
         log.warning("[EXTRAIR] Falha ao extrair o alimento")
         return ""
 
-# Converte aquele JSON da saúde do cara, para um formato mais amigável pra Megumi
+# Converte a saúde da pessoa para um formato amigável para a Megumi
 def _formatar_saude(saude: dict) -> str:
     partes = []
 
@@ -132,7 +131,6 @@ def responder_megumi(
         )
         return response.text
 
-    # Descobrir os erros. Caralho, toda hora da erro, maldito plano gratuíto
     except errors.ClientError as e:
         erro_msg = str(e)
         if "429" in erro_msg or "RESOURCE_EXHAUSTED" in erro_msg:
@@ -142,7 +140,6 @@ def responder_megumi(
         log.error("[MEGUMI] Erro de cliente na API.")
         return "Tive um probleminha aqui, mas já volto!"
 
-    # Deixa meu logzinho mais bonitinhoooo uwu. Odeio log, mas é útil. Sorte q n vou mexer niss dps
     except Exception:
         log.error("[MEGUMI] Erro inesperado.")
         return "Tive um problemão aqui, espera aí que eu vou tentar resolver e ja volto!"

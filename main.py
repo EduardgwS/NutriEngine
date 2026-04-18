@@ -4,8 +4,8 @@ from routes import router
 
 app = FastAPI(title="NutriEngine API")
 
-# Cria aquela merda daquelas tabelas do banco se n existirem
+# Tabelas
 init_db()
 
-# rotas, todas esburacadas
+# Rotas
 app.include_router(router)
