@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from database import init_db
 from routes import router
+from mercado_routes import mercado_router
 
 app = FastAPI(title="NutriEngine API")
 
-# Cria aquela merda daquelas tabelas do banco se n existirem
+# Tabelas
 init_db()
 
-# rotas, todas esburacadas
+# Rotas
 app.include_router(router)
+app.include_router(mercado_router)

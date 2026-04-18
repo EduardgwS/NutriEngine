@@ -1,14 +1,13 @@
-from datetime import datetime, timedelta, timezone
 from typing import Annotated
+import json
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import BaseModel
 
-from config import JWT_SECRET, JWT_EXPIRY_DAYS, GOOGLE_CLIENT_ID
+from auth import criar_token, usuario_atual          # ← vem do auth.py
+from config import GOOGLE_CLIENT_ID
 from database import (
     upsert_user,
     buscar_alimento, search_food_list,
@@ -17,43 +16,15 @@ from database import (
 from services import extrair_alimento, responder_megumi
 
 router = APIRouter()
-bearer = HTTPBearer()
 
 
-# JWT (login com o google). Aqui é onde declara ele, e usa.
-# Do jeito atual, junto com a requisição http, vem a credencial de autorização JWT, sem ela o usuário n tem acesso
-
-def criar_token(username: str, email: str, name: str) -> str:
-    payload = {
-        "sub":   username,
-        "email": email,
-        "name":  name,
-        "exp":   datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRY_DAYS),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-
-
-def usuario_atual(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)]) -> dict:
-    try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
-        return {"user": payload["sub"], "email": payload["email"], "name": payload["name"]}
-    # Venceu o prazo de login, aí o cara tem q logar dnv pra deixar de ser otário
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(401, "Token expirado")
-    except jwt.InvalidTokenError:
-        raise HTTPException(401, "Token inválido")
-
-
-# Esquema pra entrar. O servidor só vai aceitar se for exatamente neste formato
 class AndroidLoginRequest(BaseModel):
     id_token: str
 
 
-# Auth do Google,
 @router.post("/auth/google/android")
 def auth_android(body: AndroidLoginRequest):
     try:
-
         info = id_token.verify_oauth2_token(
             body.id_token,
             google_requests.Request(),
@@ -72,26 +43,22 @@ def auth_android(body: AndroidLoginRequest):
     return {"token": token, "user": username, "name": name, "email": email}
 
 
-# A busca dos alimentos,
 @router.get("/api/search")
 def search(q: str = ""):
-    return search_food_list(q.strip().lower())
+    return search_food_list(q)
 
-# Busca de alimentos exclusivamente pela IA (visão)
+
 @router.post("/api/identificar-alimento")
 async def identificar_alimento(
-        user:  Annotated[dict, Depends(usuario_atual)],
         text:  str               = Form(default=""),
         image: UploadFile | None = File(default=None),
 ):
-
-    texto_limpo  = text.strip()
     imagem_bytes = await image.read() if image else None
 
-    if not texto_limpo and not imagem_bytes:
+    if not text and not imagem_bytes:
         raise HTTPException(400, "Envie pelo menos um texto ou uma imagem.")
 
-    alimento = extrair_alimento(texto_limpo, imagem_bytes)
+    alimento = extrair_alimento(text, imagem_bytes)
 
     return {
         "status":   "success",
@@ -99,7 +66,6 @@ async def identificar_alimento(
     }
 
 
-# Chat da Megumi
 @router.post("/megumi/chat")
 async def megumi_chat(
         user:            Annotated[dict, Depends(usuario_atual)],
@@ -114,8 +80,6 @@ async def megumi_chat(
         raise HTTPException(400)
 
     username = user["user"]
-
-    # Carrega o histórico, salva no banco, monta o contexto da tabela TACO, e o histórico de saúde do cara
     historico = carregar_historico(username, limite=10)
 
     if texto_limpo:
@@ -124,23 +88,16 @@ async def megumi_chat(
     alimento   = extrair_alimento(texto_limpo) if texto_limpo else ""
     dados_taco = buscar_alimento(alimento) if alimento else ""
 
-    import json as _json
-    saude_json: dict | None = None
+    saude_json = None
     if historico_saude.strip():
         try:
-            saude_json = _json.loads(historico_saude)
-        # Só pra n ter erro, se o cara n tiver saúde, q se foda tbm
+            saude_json = json.loads(historico_saude)
         except Exception:
             pass
 
-    contexto_parts = []
-    if dados_taco:
-        contexto_parts.append(dados_taco)
-
-    # Resposta da Megumi uwu
     resposta = responder_megumi(
         texto_limpo,
-        " — ".join(contexto_parts),
+        dados_taco,
         imagem_bytes,
         historico,
         saude_json,
@@ -151,7 +108,6 @@ async def megumi_chat(
     return {"status": "success", "response": resposta}
 
 
-# History Channel, do chat da Megumi
 @router.get("/megumi/historico")
 def historico_chat(
         user:   Annotated[dict, Depends(usuario_atual)],
@@ -159,5 +115,3 @@ def historico_chat(
 ):
     msgs = carregar_historico(user["user"], limite=min(limite, 200))
     return {"status": "success", "mensagens": msgs}
-
-

@@ -25,8 +25,7 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
 
         if tem_texto:
             parts.append(texto)
-        elif tem_imagem:
-            # Caso só tiver imagem (aba pesquisar)
+        else:
             parts.append("Identifique o alimento principal nesta imagem.")
 
         response = client.models.generate_content(
@@ -46,7 +45,7 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
         log.warning("[EXTRAIR] Falha ao extrair o alimento")
         return ""
 
-# Converte aquele JSON da saúde do cara, para um formato mais amigável pra Megumi
+# Converte a saúde da pessoa para um formato amigável para a Megumi
 def _formatar_saude(saude: dict) -> str:
     partes = []
 
@@ -132,7 +131,6 @@ def responder_megumi(
         )
         return response.text
 
-    # Descobrir os erros. Caralho, toda hora da erro, maldito plano gratuíto
     except errors.ClientError as e:
         erro_msg = str(e)
         if "429" in erro_msg or "RESOURCE_EXHAUSTED" in erro_msg:
@@ -142,7 +140,125 @@ def responder_megumi(
         log.error("[MEGUMI] Erro de cliente na API.")
         return "Tive um probleminha aqui, mas já volto!"
 
-    # Deixa meu logzinho mais bonitinhoooo uwu. Odeio log, mas é útil. Sorte q n vou mexer niss dps
     except Exception:
         log.error("[MEGUMI] Erro inesperado.")
         return "Tive um problemão aqui, espera aí que eu vou tentar resolver e ja volto!"
+
+import json as _json
+
+def _gerar_motivo(produto: dict, gap: dict) -> str:
+    """Gera um texto explicativo baseado no gap e na categoria do produto."""
+    categoria = produto.get("categoria", "").lower()
+
+    if gap["proteinas_g"] > 0 and categoria == "proteína":
+        return f"Faltam {gap['proteinas_g']:.0f}g de proteína para sua meta"
+    if gap["carboidratos_g"] > 0 and categoria == "carboidrato":
+        return f"Faltam {gap['carboidratos_g']:.0f}g de carboidrato para sua meta"
+    if gap["gorduras_g"] > 0 and categoria == "gordura":
+        return f"Faltam {gap['gorduras_g']:.0f}g de gordura para sua meta"
+    if gap["kcal"] > 0:
+        return f"Faltam {gap['kcal']:.0f} kcal para bater sua meta diária"
+    return "Complementa sua dieta de forma equilibrada"
+
+
+def _pontuar_produto(produto: dict, gap: dict, objetivo: str) -> float:
+    """
+    Retorna uma pontuação (float >= 0) de relevância do produto para o gap.
+
+    Critérios:
+      - Contribuição proporcional de cada macro ao gap correspondente (peso 1.0)
+      - Bônus por categoria alinhada ao objetivo do usuário          (peso 0.4)
+      - Bônus por produto em promoção                                (peso 0.1)
+    """
+    score = 0.0
+
+    prot  = produto["proteinas"]
+    carbs = produto["carboidratos"]
+    gord  = produto["gorduras"]
+    kcal  = produto["kcal"]
+
+    # Contribuição proporcional ao gap (cada macro vale no máximo 1.0)
+    if gap["proteinas_g"]    > 0:
+        score += min(prot  / gap["proteinas_g"],    1.0)
+    if gap["carboidratos_g"] > 0:
+        score += min(carbs / gap["carboidratos_g"], 1.0)
+    if gap["gorduras_g"]     > 0:
+        score += min(gord  / gap["gorduras_g"],     1.0)
+    if gap["kcal"]           > 0:
+        score += min(kcal  / gap["kcal"],           1.0) * 0.5  # peso menor: kcal é derivada
+
+    # Bônus por objetivo
+    objetivo_lower = objetivo.lower()
+    categoria      = produto.get("categoria", "").lower()
+
+    if "músculo" in objetivo_lower or "massa" in objetivo_lower:
+        if categoria == "proteína":
+            score += 0.4
+        elif categoria == "carboidrato":
+            score += 0.2
+
+    elif "perder" in objetivo_lower or "emagrecer" in objetivo_lower:
+        if categoria == "proteína":
+            score += 0.4
+        elif categoria in ("gordura", "snack"):
+            score -= 0.2  # penaliza levemente
+
+    elif "alimentação" in objetivo_lower or "saúde" in objetivo_lower:
+        if categoria in ("proteína", "carboidrato", "gordura"):
+            score += 0.2
+
+    # Bônus por promoção
+    if produto.get("preco_antigo") is not None:
+        score += 0.1
+
+    return max(score, 0.0)
+
+
+def recomendar_produtos(
+        perfil:       dict,
+        consumo_hoje: dict,
+        gap:          dict,
+        produtos:     list[dict],
+        n:            int = 6,
+) -> list[dict]:
+    """
+    Seleciona e ordena os produtos mais relevantes para o gap nutricional
+    do usuário sem usar nenhum modelo de linguagem.
+
+    Retorna no máximo `n` produtos, priorizando variedade de categorias
+    (no máximo 3 produtos por categoria).
+    """
+    objetivo = perfil.get("objetivo", "")
+
+    # Pontua todos os produtos
+    pontuados = [
+        (produto, _pontuar_produto(produto, gap, objetivo))
+        for produto in produtos
+        if produto.get("ativo", True)
+    ]
+
+    # Ordena por pontuação decrescente
+    pontuados.sort(key=lambda x: x[1], reverse=True)
+
+    # Seleciona respeitando o limite por categoria (máx. 3 por categoria)
+    resultado: list[dict]      = []
+    contagem_cat: dict[str, int] = {}
+    MAX_POR_CAT = 3
+
+    for produto, _ in pontuados:
+        if len(resultado) >= n:
+            break
+        cat = produto.get("categoria", "outro")
+        if contagem_cat.get(cat, 0) >= MAX_POR_CAT:
+            continue
+        enriquecido           = dict(produto)
+        enriquecido["motivo"] = _gerar_motivo(produto, gap)
+        resultado.append(enriquecido)
+        contagem_cat[cat]     = contagem_cat.get(cat, 0) + 1
+
+    log.info(
+        f"[RECOMENDACAO] {len(resultado)} produtos selecionados "
+        f"(objetivo='{objetivo}', gap_prot={gap['proteinas_g']}g, "
+        f"gap_carb={gap['carboidratos_g']}g, gap_gord={gap['gorduras_g']}g)"
+    )
+    return resultado

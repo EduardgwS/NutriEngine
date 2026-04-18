@@ -2,14 +2,13 @@ import psycopg2
 import psycopg2.extras
 from config import PG_DSN
 
-# Conecta com o banco, e traduz pra uma forma mais legal de mexer no python (dicionário)
+# Conecta com o banco, e traduz pra dicionário
 def conn():
     return psycopg2.connect(PG_DSN, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 
-# Criação dessa desgraça de banco. Odeio, não sei como funciona, mas funciona
-# Tem índíce, precisa? Não, mas é legal ter
+# DDL
 def init_db():
     with conn() as c, c.cursor() as cur:
         cur.execute("""
@@ -34,7 +33,7 @@ def init_db():
         """)
 
 
-# Usuários, esse UPSERT é um negócio legal q da pra dar update e insert ao mesmo tempo
+# Usuários
 def upsert_user(username: str, name: str, email: str):
     with conn() as c, c.cursor() as cur:
         cur.execute("""
@@ -45,7 +44,7 @@ def upsert_user(username: str, name: str, email: str):
 
 
 
-# Histórico de msg. Salva as mensagens da conversa com a IA
+# Salvar mensagens no histórico
 def salvar_mensagem(username: str, papel: str, mensagem: str):
     with conn() as c, c.cursor() as cur:
         cur.execute(
@@ -171,6 +170,100 @@ def search_food_list(query: str) -> list[dict]:
                 "carbs":   float(row["carbs"]   or 0),
                 "fat":     float(row["fat"]     or 0),
             },
+        }
+        for row in rows
+    ]
+
+MERCADO_DDL = """
+    CREATE TABLE IF NOT EXISTS parceiros (
+        id        SERIAL PRIMARY KEY,
+        nome      TEXT NOT NULL,
+        logo_url  TEXT,
+        site_url  TEXT,
+        ativo     BOOLEAN NOT NULL DEFAULT true,
+        criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+ 
+    CREATE TABLE IF NOT EXISTS produtos (
+        id            TEXT PRIMARY KEY,          -- ex: "prod_123"
+        parceiro_id   INT  NOT NULL REFERENCES parceiros(id) ON DELETE CASCADE,
+        nome          TEXT NOT NULL,
+        marca         TEXT,
+        imagem_url    TEXT,
+        preco_atual   NUMERIC(10,2) NOT NULL,
+        preco_antigo  NUMERIC(10,2),             -- NULL = sem desconto
+        quantidade_g  NUMERIC(10,1),
+        url_compra    TEXT NOT NULL,
+        categoria     TEXT,                      -- "Proteína", "Carboidrato", etc.
+        kcal          NUMERIC(8,1) DEFAULT 0,
+        proteinas     NUMERIC(8,1) DEFAULT 0,
+        carboidratos  NUMERIC(8,1) DEFAULT 0,
+        gorduras      NUMERIC(8,1) DEFAULT 0,
+        ativo         BOOLEAN NOT NULL DEFAULT true,
+        criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+"""
+
+
+def listar_parceiros() -> list[dict]:
+    """Retorna todos os parceiros ativos."""
+    with conn() as c, c.cursor() as cur:
+        cur.execute("""
+            SELECT id, nome, logo_url, site_url
+            FROM   parceiros
+            WHERE  ativo = true
+            ORDER  BY nome
+        """)
+        rows = cur.fetchall()
+    return [
+        {
+            "id":       str(row["id"]),
+            "nome":     row["nome"],
+            "logo_url": row["logo_url"] or "",
+            "site_url": row["site_url"] or "",
+        }
+        for row in rows
+    ]
+
+
+def listar_produtos_ativos() -> list[dict]:
+    """
+    Retorna todos os produtos ativos junto com nome e logo do parceiro.
+    Usado pelo serviço de recomendação para montar o catálogo.
+    """
+    with conn() as c, c.cursor() as cur:
+        cur.execute("""
+            SELECT
+                p.id, p.nome, p.marca,
+                p.imagem_url, p.preco_atual, p.preco_antigo,
+                p.quantidade_g, p.url_compra, p.categoria,
+                p.kcal, p.proteinas, p.carboidratos, p.gorduras,
+                pa.nome     AS nome_mercado,
+                pa.logo_url AS logo_mercado
+            FROM   produtos  p
+            JOIN   parceiros pa ON pa.id = p.parceiro_id
+            WHERE  p.ativo = true AND pa.ativo = true
+            ORDER  BY p.categoria, p.nome
+        """)
+        rows = cur.fetchall()
+
+    return [
+        {
+            "id":            row["id"],
+            "nome":          row["nome"],
+            "marca":         row["marca"] or "",
+            "imagem_url":    row["imagem_url"] or "",
+            "preco_atual":   float(row["preco_atual"]),
+            "preco_antigo":  float(row["preco_antigo"]) if row["preco_antigo"] else None,
+            "quantidade_g":  float(row["quantidade_g"] or 0),
+            "url_compra":    row["url_compra"],
+            "categoria":     row["categoria"] or "",
+            "kcal":          float(row["kcal"] or 0),
+            "proteinas":     float(row["proteinas"] or 0),
+            "carboidratos":  float(row["carboidratos"] or 0),
+            "gorduras":      float(row["gorduras"] or 0),
+            "nome_mercado":  row["nome_mercado"],
+            "logo_mercado":  row["logo_mercado"] or "",
         }
         for row in rows
     ]
