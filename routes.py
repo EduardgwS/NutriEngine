@@ -53,7 +53,6 @@ class AndroidLoginRequest(BaseModel):
 @router.post("/auth/google/android")
 def auth_android(body: AndroidLoginRequest):
     try:
-
         info = id_token.verify_oauth2_token(
             body.id_token,
             google_requests.Request(),
@@ -77,25 +76,27 @@ def auth_android(body: AndroidLoginRequest):
 def search(q: str = ""):
     return search_food_list(q.strip().lower())
 
-# Busca de alimentos exclusivamente pela IA (visão)
+
+# Busca de alimentos exclusivamente pela IA (visão).
+# Retorna o nome normalizado (TACO) e o peso estimado em gramas quando detectável.
 @router.post("/api/identificar-alimento")
 async def identificar_alimento(
         user:  Annotated[dict, Depends(usuario_atual)],
         text:  str               = Form(default=""),
         image: UploadFile | None = File(default=None),
 ):
-
     texto_limpo  = text.strip()
     imagem_bytes = await image.read() if image else None
 
     if not texto_limpo and not imagem_bytes:
         raise HTTPException(400, "Envie pelo menos um texto ou uma imagem.")
 
-    alimento = extrair_alimento(texto_limpo, imagem_bytes)
+    resultado = extrair_alimento(texto_limpo, imagem_bytes)
 
     return {
         "status":   "success",
-        "alimento": alimento if alimento else None,
+        "alimento": resultado["alimento"],
+        "gramas":   resultado["gramas"],
     }
 
 
@@ -121,8 +122,10 @@ async def megumi_chat(
     if texto_limpo:
         salvar_mensagem(username, "user", texto_limpo)
 
-    alimento   = extrair_alimento(texto_limpo) if texto_limpo else ""
-    dados_taco = buscar_alimento(alimento) if alimento else ""
+    # extrair_alimento agora retorna dict; só o nome interessa para busca no TACO
+    alimento_resultado = extrair_alimento(texto_limpo) if texto_limpo else {}
+    alimento           = alimento_resultado.get("alimento") or ""
+    dados_taco         = buscar_alimento(alimento) if alimento else ""
 
     import json as _json
     saude_json: dict | None = None
@@ -159,5 +162,3 @@ def historico_chat(
 ):
     msgs = carregar_historico(user["user"], limite=min(limite, 200))
     return {"status": "success", "mensagens": msgs}
-
-

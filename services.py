@@ -1,3 +1,4 @@
+import json
 import logging
 from google import genai
 from google.genai import types, errors
@@ -8,14 +9,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Normaliza o texto ou a imagem, pro padrão TACO
-def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
+
+# Normaliza o texto ou a imagem pro padrão TACO, e estima o peso se possível.
+# Retorna dict {"alimento": str | None, "gramas": float | None}
+def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> dict:
 
     tem_texto  = bool(texto.strip())
     tem_imagem = bool(imagem_bytes)
 
     if not tem_texto and not tem_imagem:
-        return ""
+        return {"alimento": None, "gramas": None}
 
     try:
         parts: list = []
@@ -26,7 +29,7 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
         if tem_texto:
             parts.append(texto)
         else:
-            parts.append("Identifique o alimento principal nesta imagem.")
+            parts.append("Identifique o alimento principal nesta imagem e estime o peso em gramas.")
 
         response = client.models.generate_content(
             model   = GEMINI_MODEL,
@@ -34,16 +37,43 @@ def extrair_alimento(texto: str, imagem_bytes: bytes | None = None) -> str:
             config  = types.GenerateContentConfig(
                 system_instruction = TACO_PROMPT,
                 temperature        = 0.0,
-                max_output_tokens  = 32,
+                max_output_tokens  = 64,
             ),
         )
-        alimento = response.text.strip().lower()
-        log.info(f"[EXTRAIR] Resultado: {alimento!r} (imagem={'sim' if tem_imagem else 'não'})")
-        return "" if not alimento or alimento == "(nenhum)" else alimento
 
-    except Exception:
-        log.warning("[EXTRAIR] Falha ao extrair o alimento")
-        return ""
+        raw = response.text.strip()
+
+        # Remove cercas de markdown caso o modelo as inclua por engano
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        parsed   = json.loads(raw)
+        alimento = parsed.get("alimento") or None
+        gramas   = parsed.get("gramas")
+
+        # Garante que gramas seja float ou None
+        if gramas is not None:
+            try:
+                gramas = float(gramas)
+            except (TypeError, ValueError):
+                gramas = None
+
+        if alimento:
+            alimento = alimento.strip().lower()
+
+        log.info(
+            f"[EXTRAIR] alimento={alimento!r}  gramas={gramas}  "
+            f"(imagem={'sim' if tem_imagem else 'não'})"
+        )
+        return {"alimento": alimento, "gramas": gramas}
+
+    except Exception as e:
+        log.warning("[EXTRAIR] Falha ao extrair o alimento: " + str(e))
+        return {"alimento": None, "gramas": None}
+
 
 # Converte a saúde da pessoa para um formato amigável para a Megumi
 def _formatar_saude(saude: dict) -> str:
@@ -75,6 +105,7 @@ def _formatar_saude(saude: dict) -> str:
 
     return "\n".join(partes)
 
+
 # Megumi, oq ela recebe e como vai responder.
 def responder_megumi(
         texto:        str,
@@ -83,7 +114,6 @@ def responder_megumi(
         historico:    list[dict] | None = None,
         saude_json:   dict | None     = None,
 ) -> str:
-
 
     contents: list[types.Content] = []
 
@@ -144,7 +174,6 @@ def responder_megumi(
         log.error("[MEGUMI] Erro inesperado.")
         return "Tive um problemão aqui, espera aí que eu vou tentar resolver e ja volto!"
 
-import json as _json
 
 def _gerar_motivo(produto: dict, gap: dict) -> str:
     """Gera um texto explicativo baseado no gap e na categoria do produto."""

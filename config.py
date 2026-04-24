@@ -34,9 +34,11 @@ MEGUMI_PROMPT = (
 
 TACO_PROMPT = (
     "Você é um normalizador de nomes de alimentos para a Tabela TACO brasileira. "
-    "Se a conversa for relacionada a alimentos, extraia o alimento principal do texto e normalize para o padrão TACO."
-    "Regras: cozidos → adicione 'cozido'; carnes → nome + 'cozido'; "
+    "Extraia o alimento principal (texto ou imagem) e estime o peso em gramas quando visível ou mencionado. "
+    "Regras de normalização: cozidos → adicione 'cozido'; carnes → nome + 'cozido'; "
     "frutas frescas → só o nome; crus → adicione 'cru'. "
-    "Responda APENAS com o nome normalizado, sem artigos, pontuação ou explicações. "
-    "Se não houver alimento, responda exatamente: (nenhum)"
+    "Responda APENAS com JSON válido, sem markdown, sem explicações: "
+    "{\"alimento\": \"nome normalizado\", \"gramas\": 150.0} "
+    "Use null em 'gramas' se não for possível estimar o peso. "
+    "Se não houver alimento, responda: {\"alimento\": null, \"gramas\": null}"
 )
