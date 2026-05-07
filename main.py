@@ -1,13 +1,11 @@
 from fastapi import FastAPI
-from database import init_db
-from routes import router
-from mercado_routes import mercado_router
-
+from routes.routes import router
+from routes.mercado_routes import mercado_router
+from fastapi.staticfiles import StaticFiles
 app = FastAPI(title="NutriEngine API")
 
-# Tabelas
-init_db()
 
 # Rotas
+app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 app.include_router(router)
 app.include_router(mercado_router)

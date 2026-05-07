@@ -1,0 +1,58 @@
+{
+  "0": [
+    {
+      "icone": "restaurant",
+      "titulo": "Falta proteína!",
+      "corpo": "Que tal um bife acebolado no almoço?\nSeu músculo vai agradecer."
+    },
+    {
+      "icone": "kebab_dining",
+      "titulo": "Proteína em falta!",
+      "corpo": "Uns ovos mexidos agora resolvem o problema e ficam prontos em 5 minutos."
+    },
+    {
+      "icone": "set_meal",
+      "titulo": "Tá faltando proteína!",
+      "corpo": "Um atum com torrada é rápido, barato e resolve o déficit do dia."
+    }
+  ],
+
+  "1": [
+    {
+      "icone": "grain",
+      "titulo": "Energia no chinelo!",
+      "corpo": "Você tá devendo carboidrato. Uma porção de arroz ou macarrão resolve."
+    },
+    {
+      "icone": "bakery_dining",
+      "titulo": "Carboidrato em falta.",
+      "corpo": "Batata doce assada é uma boa opção — saudável e muito fácil de fazer."
+    }
+  ],
+
+  "2": [
+    {
+      "icone": "opacity",
+      "titulo": "Gordura do bem em falta!",
+      "corpo": "Um abacate no lanche ou salada resolve. E é gostoso demais."
+    },
+    {
+      "icone": "water_drop",
+      "titulo": "Falta gordura na dieta!",
+      "corpo": "Drizzle de azeite na comida ou umas nozes no lanche já resolvem."
+    }
+  ],
+
+  "-1": [
+    {
+      "icone": "check_circle",
+      "titulo": "Missão cumprida!",
+      "corpo": "Você bateu a meta de macros de hoje. Bora repetir amanhã?"
+    },
+    {
+      "icone": "stars",
+      "titulo": "Parabéns!",
+      "corpo": "Macros no verde hoje. Sua alimentação tá no caminho certo!"
+    }
+  ]
+}

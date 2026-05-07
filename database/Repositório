@@ -1,0 +1,70 @@
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+            CREATE TABLE IF NOT EXISTS users (
+                id       SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                name     TEXT,
+                email    TEXT UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id         SERIAL PRIMARY KEY,
+                username   TEXT        NOT NULL REFERENCES users(username),
+                papel      TEXT        NOT NULL CHECK (papel IN ('user', 'megumi')),
+                mensagem   TEXT        NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chat_history_username
+                ON chat_history (username, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS parceiros (
+                id        SERIAL PRIMARY KEY,
+                nome      TEXT NOT NULL,
+                logo_url  TEXT,
+                site_url  TEXT,
+                ativo     BOOLEAN NOT NULL DEFAULT true,
+                criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS produtos (
+                id            TEXT PRIMARY KEY,
+                parceiro_id   INT  NOT NULL REFERENCES parceiros(id) ON DELETE CASCADE,
+                nome          TEXT NOT NULL,
+                marca         TEXT,
+                imagem_url    TEXT,
+                preco_atual   NUMERIC(10,2) NOT NULL,
+                preco_antigo  NUMERIC(10,2),
+                quantidade_g  NUMERIC(10,1),
+                url_compra    TEXT NOT NULL,
+                categoria     TEXT,
+                kcal          NUMERIC(8,1) DEFAULT 0,
+                proteinas     NUMERIC(8,1) DEFAULT 0,
+                carboidratos  NUMERIC(8,1) DEFAULT 0,
+                gorduras      NUMERIC(8,1) DEFAULT 0,
+                ativo         BOOLEAN NOT NULL DEFAULT true,
+                criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
+
+
+
+            CREATE TABLE IF NOT EXISTS alimento (
+                codigo      INTEGER PRIMARY KEY,
+                descricao   TEXT NOT NULL,
+                classe      TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS nutriente (
+                id               SERIAL PRIMARY KEY,
+                codigo_alimento  INTEGER REFERENCES alimento(codigo) ON DELETE CASCADE,
+                componente       TEXT NOT NULL,
+                unidade          TEXT,
+                valor            NUMERIC
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_nutriente_codigo ON nutriente(codigo_alimento);
+            CREATE INDEX IF NOT EXISTS idx_nutriente_componente ON nutriente(componente);
+
+            -- Habilita pg_trgm para similarity() usado nas buscas
+            CREATE EXTENSION IF NOT EXISTS pg_trgm;

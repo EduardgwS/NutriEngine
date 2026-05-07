@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from config import JWT_SECRET, JWT_EXPIRY_DAYS
+from core.config import JWT_SECRET, JWT_EXPIRY_DAYS
 
 bearer = HTTPBearer()
 
